@@ -12,48 +12,139 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-resource "google_cloud_run_service" "default" {
-  provider                   = google
-  name                       = "open-data-lakehouse-demo"
-  location                   = var.region
-  project                    = var.project_id
-  autogenerate_revision_name = true
+# a null resource that is connected to the content_hash from build.tf
+resource "null_resource" "deployment_trigger" {
+  triggers = {
+    source_contents_hash = local.cloud_build_content_hash
+  }
+}
+
+# the cloud service
+resource "google_cloud_run_v2_service" "default" {
+  provider = google
+  name     = "open-data-lakehouse-demo"
+  location = var.region
+  project  = var.project_id
+  ingress  = "INGRESS_TRAFFIC_ALL"
+
+  deletion_protection = false # set to "true" in production
 
   template {
-    spec {
-      containers {
-        image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/${local.image_name}:latest"
-        ports {
-          container_port = 8080
-        }
-        resources {
-          limits = {
-            cpu    = "1000m"
-            memory = "2Gi"
-          }
-        }
+    vpc_access {
+      network_interfaces {
+        network    = google_compute_network.open-lakehouse-network.id
+        subnetwork = google_compute_subnetwork.open-lakehouse-subnetwork.id
       }
     }
-    metadata {
-      annotations = {
-        "run.googleapis.com/allow-unauthenticated" = "true"
+    containers {
+
+      image = "${var.region}-docker.pkg.dev/${var.project_id}/${google_artifact_registry_repository.docker_repo.repository_id}/${local.image_name}:latest"
+      ports {
+        container_port = 8080
+      }
+      env {
+        name  = "BQ_DATASET"
+        value = google_bigquery_dataset.ridership_lakehouse.dataset_id
+      }
+      env {
+        name  = "PROJECT_ID"
+        value = var.project_id
+      }
+      env {
+        name  = "GCS_MAIN_BUCKET"
+        value = google_storage_bucket.data_lakehouse_bucket.name
+      }
+      env {
+        name  = "REGION"
+        value = var.region
+      }
+      env {
+        name  = "KAFKA_BOOTSTRAP"
+        value = "bootstrap.${google_managed_kafka_cluster.default.cluster_id}.${google_managed_kafka_cluster.default.location}.managedkafka.${var.project_id}.cloud.goog:9092"
+      }
+      env {
+        name  = "KAFKA_TOPIC"
+        value = google_managed_kafka_topic.bus_updates.topic_id
+      }
+      env {
+        name  = "KAFKA_ALERT_TOPIC"
+        value = google_managed_kafka_topic.capacity_alerts.topic_id
+      }
+      env {
+        name  = "SPARK_TMP_BUCKET"
+        value = google_storage_bucket.spark_bucket.name
+      }
+      env {
+        name  = "SPARK_CHECKPOINT_LOCATION"
+        value = "gs://${google_storage_bucket.spark_bucket.name}/checkpoint"
+      }
+      env {
+        name  = "BIGQUERY_TABLE"
+        value = "bus_state"
+      }
+      env {
+        name  = "SUBNET_URI"
+        value = google_compute_subnetwork.open-lakehouse-subnetwork.id
+      }
+      resources {
+        limits = {
+          cpu    = "1000m"
+          memory = "2Gi"
+        }
       }
     }
   }
 
   traffic {
-    percent         = 100
-    latest_revision = true
+    type    = "TRAFFIC_TARGET_ALLOCATION_TYPE_LATEST"
+    percent = 100
   }
 
   depends_on = [
     google_artifact_registry_repository.docker_repo,
-    module.gcloud_build_webapp,
-    module.project_services
+    module.gcloud_build_webapp.wait,
+    module.project_services,
+    google_project_organization_policy.allow_policy_member_domains
   ]
+
+  lifecycle {
+    replace_triggered_by = [null_resource.deployment_trigger]
+  }
+  invoker_iam_disabled = true
+
+}
+
+resource "google_cloud_run_v2_service_iam_binding" "default" {
+  project  = var.project_id
+  location = google_cloud_run_v2_service.default.location
+  name     = google_cloud_run_v2_service.default.name
+  role     = "roles/run.invoker"
+  members = [
+    "allUsers"
+  ]
+
+  depends_on = [
+    google_cloud_run_v2_service.default,
+    google_project_organization_policy.allow_policy_member_domains
+  ]
+}
+# Assigns the Storage Object Viewer role to the service account, allowing it to read objects in GCS buckets.
+resource "google_project_iam_member" "cloud_run_user_bq_permissions" {
+  for_each = toset(["roles/bigquery.dataEditor", "roles/bigquery.jobUser"])
+  project = var.project_id
+  role    = each.value
+
+  member = "serviceAccount:${google_cloud_run_v2_service.default.template[0].service_account}"
+}
+
+resource "google_project_iam_member" "cloud_run_user_dataproc_permissions" {
+  for_each = toset(["roles/dataproc.editor"])
+  project = var.project_id
+  role    = each.value
+  member  = "serviceAccount:${google_cloud_run_v2_service.default.template[0].service_account}"
 }
 
 output "cloud_run_url" {
   description = "The URL of the deployed Cloud Run service"
-  value       = google_cloud_run_service.default.status[0].url
+  value       = google_cloud_run_v2_service.default.uri
 }
