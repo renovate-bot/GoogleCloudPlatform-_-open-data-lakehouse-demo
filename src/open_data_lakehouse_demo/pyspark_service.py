@@ -57,8 +57,12 @@ class PySparkService:
         return f"projects/{self.project_id}/locations/{self.region}/batches/{self.batch_id}"
 
     @property
-    def status(self):
+    def status(self) -> JobStatus:
         return self.__status__
+
+    @property
+    def pyspark_main_file(self) -> str:
+        return f"gs://{self.gcs_main_bucket}/notebooks_and_code/pyspark-job.py"
 
     # noinspection PyTypeChecker
     def start_pyspark(self, stop_event, retry_count: int = 0):
@@ -67,7 +71,7 @@ class PySparkService:
         # self.clear_previous_checkpoints()
         batch = dataproc.Batch(
             pyspark_batch=dataproc.PySparkBatch(
-                main_python_file_uri=f"gs://{self.gcs_main_bucket}/notebooks_and_code/pyspark-job.py",
+                main_python_file_uri=self.pyspark_main_file,
                 args=[
                     f"--kafka-brokers={self.kafka_bootstrap}",
                     f"--kafka-input-topic={self.kafka_topic}",
@@ -141,7 +145,7 @@ class PySparkService:
             })
         except exceptions.NotFound:
             logging.info("Batch Job not found or not started.")
-            self.__status__ = JobStatus(status=PySparkState.NOT_FOUND, message="Job not found.")
+            self.__status__ = JobStatus(status=PySparkState.NOT_STARTED, message="Job not started.")
             return
         except Exception as e:
             logging.exception(e)
@@ -180,7 +184,7 @@ class PySparkService:
                 "name": self.full_batch_id
             })
         except exceptions.NotFound:
-            return JobStatus(status=PySparkState.NOT_FOUND, message="Job not found.")
+            return JobStatus(status=PySparkState.NOT_STARTED, message="Job not started.")
         except Exception as e:
             logging.exception(e)
             return JobStatus(status=PySparkState.UNKNOWN_ERROR, message=str(e))
@@ -255,7 +259,7 @@ class PySparkState(enum.IntEnum):
     CANCELLING = 9
 
     STATE_UNSPECIFIED = 10
-    NOT_FOUND = 11
+    NOT_STARTED = 11
     ALREADY_EXISTS = 12
     PERMISSION_DENIED = 13
     RESOURCE_EXHAUSTED = 14
