@@ -27,6 +27,7 @@ class PySparkService:
             bigquery_dataset: str,
             bigquery_table: str,
             subnet_uri: str,
+            service_account: str,
     ):
         self.project_id = project_id
         self.region = region
@@ -39,6 +40,7 @@ class PySparkService:
         self.bigquery_dataset = bigquery_dataset
         self.bigquery_table = bigquery_table
         self.subnet_uri = subnet_uri
+        self.service_account = service_account
 
         self.client = dataproc.BatchControllerClient(client_options={
             "api_endpoint": f"{region}-dataproc.googleapis.com:443"
@@ -94,7 +96,8 @@ class PySparkService:
             ),
             environment_config=dataproc.EnvironmentConfig(
                 execution_config=dataproc.ExecutionConfig(
-                    subnetwork_uri=self.subnet_uri
+                    subnetwork_uri=self.subnet_uri,
+                    service_account=self.service_account,
                 )
             ),
         )
@@ -128,12 +131,7 @@ class PySparkService:
         except Exception as e:
             self.__status__ = JobStatus(status=PySparkState.UNKNOWN_ERROR, message=str(e))
         self.__status__ = JobStatus(status=PySparkState.SUBMITTED, message="Job Submitted")
-        while not stop_event.is_set() and self.status.is_running:
-            time.sleep(1)
-            self.__status__ = self.get_job_status()
-            if not self.__status__.is_running:
-                logging.warning("Job stopped running")
-                break
+        
 
     def get_stats(self):
         return self.bq_service.get_bus_state(self.bigquery_table)

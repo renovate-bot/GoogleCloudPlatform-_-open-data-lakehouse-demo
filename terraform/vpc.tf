@@ -90,6 +90,7 @@ resource "google_compute_router_nat" "nat-config" {
 
 # Create an IP address
 resource "google_compute_global_address" "private_ip_alloc" {
+  project = var.project_id
   name          = "private-ip-alloc"
   purpose       = "VPC_PEERING"
   address_type  = "INTERNAL"
@@ -106,6 +107,7 @@ resource "google_service_networking_connection" "default" {
 
 # (Optional) Import or export custom routes
 resource "google_compute_network_peering_routes_config" "peering_routes" {
+  project = var.project_id
   peering = google_service_networking_connection.default.peering
   network = google_compute_network.open-lakehouse-network.name
 

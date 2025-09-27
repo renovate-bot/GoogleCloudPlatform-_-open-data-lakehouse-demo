@@ -35,9 +35,9 @@ resource "google_cloud_run_v2_service" "default" {
   ingress  = "INGRESS_TRAFFIC_ALL"
 
   deletion_protection = false # set to "true" in production
-  
+
   template {
-    
+
     vpc_access {
       egress = "ALL_TRAFFIC"
       network_interfaces {
@@ -95,6 +95,10 @@ resource "google_cloud_run_v2_service" "default" {
         name  = "SUBNET_URI"
         value = google_compute_subnetwork.open-lakehouse-subnetwork.id
       }
+      env {
+        name  = "SERVICE_ACCOUNT"
+        value = google_service_account.cloudrun_sa.email
+      }
       resources {
         limits = {
           cpu    = "1000m"
@@ -121,6 +125,7 @@ resource "google_cloud_run_v2_service" "default" {
 
   lifecycle {
     replace_triggered_by = [null_resource.deployment_trigger]
+
   }
   invoker_iam_disabled = true
 

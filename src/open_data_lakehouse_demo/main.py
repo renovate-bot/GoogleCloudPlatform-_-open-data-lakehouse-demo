@@ -36,6 +36,7 @@ SPARK_TMP_BUCKET = os.environ["SPARK_TMP_BUCKET"]
 SPARK_CHECKPOINT_LOCATION = os.environ["SPARK_CHECKPOINT_LOCATION"]
 BIGQUERY_TABLE = os.environ["BIGQUERY_TABLE"]
 SUBNET_URI = os.environ["SUBNET_URI"]
+SERVICE_ACCOUNT = os.environ["SERVICE_ACCOUNT"]
 app = Flask(__name__, template_folder=templates_dir)
 executor = Executor(app)
 
@@ -64,19 +65,21 @@ spark_service = PySparkService(
     SPARK_CHECKPOINT_LOCATION,
     BQ_DATASET,
     BIGQUERY_TABLE,
-    SUBNET_URI
+    SUBNET_URI,
+    SERVICE_ACCOUNT,
 )
 
 @app.route("/spark_status", methods=["GET"])
 def spark_status():
     global spark_service
-    if spark_service.status.is_running:
+    status = spark_service.get_job_status()
+    if status.is_running:
         return jsonify({
-            **spark_service.status.to_dict(),
+            **status.to_dict(),
             "stats": spark_service.get_stats()
         })
     else:
-        return jsonify(spark_service.status.to_dict())
+        return jsonify(status.to_dict())
 
 @app.route("/kafka_status", methods=["GET"])
 def kafka_status():

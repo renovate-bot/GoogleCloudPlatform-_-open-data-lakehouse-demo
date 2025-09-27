@@ -166,7 +166,8 @@
                 target_msg_cell.removeClass(text_colors_classes).addClass("text-green-400").text(`${message}`);
             }
         });
-        const non_reported_bus_lines = stats.map(bus_update => bus_update.bus_line_id).filter(bus_line_id => !all_bus_lines.includes(bus_line_id));
+        const reported_bus_lines = stats.map(bus_update => bus_update.bus_line_id);
+        const non_reported_bus_lines = all_bus_lines.filter(bus_line_id => !reported_bus_lines.includes(bus_line_id));
         non_reported_bus_lines.forEach(bus_line_id => {
             $("#bus-line-" + bus_line_id + " .bus-updates").removeClass(text_colors_classes).addClass("text-gray-400").text("No active lines currently.");
             $("#bus-line-" + bus_line_id + " .update-time").text("");
