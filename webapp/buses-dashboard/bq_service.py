@@ -1,13 +1,30 @@
+# Copyright 2024 Google LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
 import datetime
 import logging
 
 from google.api_core import exceptions
 from google.cloud import bigquery
+
 bigquery_client = None
 
-class BigQueryService():
+
+class BigQueryService:
     client = None
     DAYS_TO_QUERY = 10
+
     def __init__(self, bq_dataset: str):
         self.client = bigquery.Client()
         self.bq_dataset = bq_dataset
@@ -23,7 +40,7 @@ class BigQueryService():
             FROM `{self.bq_dataset}.bus_lines`
         """
         return [x for x in self.client.query(query).result()]
-    
+
     def get_bus_state(self, table_name: str):
         try:
             table_obj = self.client.get_table(f"{self.bq_dataset}.{table_name}")
@@ -31,10 +48,12 @@ class BigQueryService():
             return []
         query = f"SELECT * FROM {self.bq_dataset}.{table_name}"
         return [dict(x) for x in self.client.query(query).result()]
-        
+
     def get_rides_data(self):
         now = datetime.datetime.now(datetime.UTC)
-        start_timestamp = (now - datetime.timedelta(days=self.DAYS_TO_QUERY)).replace(year=2024)
+        start_timestamp = (now - datetime.timedelta(days=self.DAYS_TO_QUERY)).replace(
+            year=2024
+        )
         stop_timestamp = now.replace(year=2024)
 
         query = f"""
@@ -71,9 +90,9 @@ class BigQueryService():
         try:
             self.client.get_table(f"{self.bq_dataset}.{bigquery_table}")
         except exceptions.NotFound:
-            logging.info(f"Drop operation - Table {self.bq_dataset}.{bigquery_table} not found. Skipping")
+            logging.info(
+                f"Drop operation - Table {self.bq_dataset}.{bigquery_table} not found. Skipping"
+            )
             return
         query = f"DELETE FROM {self.bq_dataset}.{bigquery_table} WHERE 1=1;"
         self.client.query(query).result()
-
-

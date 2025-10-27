@@ -11,6 +11,7 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+
 import logging
 import os
 import threading  # Used to manage the stop signal for the background task
@@ -18,9 +19,9 @@ import threading  # Used to manage the stop signal for the background task
 from flask import Flask, render_template, jsonify
 from flask_executor import Executor
 
-from open_data_lakehouse_demo.bq_service import BigQueryService
-from open_data_lakehouse_demo.kafka_service import KafkaService
-from open_data_lakehouse_demo.pyspark_service import PySparkService
+from bq_service import BigQueryService
+from kafka_service import KafkaService
+from pyspark_service import PySparkService
 
 templates_dir = os.path.join(os.path.dirname(__file__), "templates")
 
@@ -69,23 +70,24 @@ spark_service = PySparkService(
     SERVICE_ACCOUNT,
 )
 
+
 @app.route("/spark_status", methods=["GET"])
 def spark_status():
     global spark_service
     status = spark_service.get_job_status()
     if status.is_running:
-        return jsonify({
-            **status.to_dict(),
-            "stats": spark_service.get_stats()
-        })
+        return jsonify({**status.to_dict(), "stats": spark_service.get_stats()})
     else:
         return jsonify(status.to_dict())
+
 
 @app.route("/kafka_status", methods=["GET"])
 def kafka_status():
     kafka_service = KafkaService()
     if not app.config[KAFKA_TASK_ID_KEY]:
-         return jsonify({"status": "inactive", "message": "No kafka producer has been submitted."})
+        return jsonify(
+            {"status": "inactive", "message": "No kafka producer has been submitted."}
+        )
 
     if app.config[KAFKA_TASK_ID_KEY].running():
         return jsonify(
@@ -108,12 +110,15 @@ def kafka_status():
                 }
             )
         except Exception as e:
-             return jsonify({
-                "status": "error",
-                "message": f"Kafka producer job failed with an exception: {e}"
-            })
+            return jsonify(
+                {
+                    "status": "error",
+                    "message": f"Kafka producer job failed with an exception: {e}",
+                }
+            )
 
     return jsonify({"status": "unknown", "message": "Could not determine job status."})
+
 
 @app.route("/start_spark_simulation", methods=["POST"])
 def start_spark_simulation():
@@ -127,12 +132,17 @@ def start_spark_simulation():
     if app.config[SPARK_TASK_ID_KEY]:
         app.config[SPARK_TASK_ID_KEY].cancel()
     app.config[SPARK_TASK_ID_KEY] = None
-    app.config[SPARK_TASK_ID_KEY] = executor.submit(spark_service.start_pyspark, app.config[SPARK_EVENT_KEY])
+    app.config[SPARK_TASK_ID_KEY] = executor.submit(
+        spark_service.start_pyspark, app.config[SPARK_EVENT_KEY]
+    )
     return jsonify(spark_service.status.to_dict())
+
 
 @app.route("/start_kafka_simulation", methods=["POST"])
 def start_kafka_simulation():
-    if app.config[KAFKA_TASK_ID_KEY] is not None and not executor.futures.done(app.config[KAFKA_TASK_ID_KEY]):
+    if app.config[KAFKA_TASK_ID_KEY] is not None and not executor.futures.done(
+        app.config[KAFKA_TASK_ID_KEY]
+    ):
         return jsonify({"message": "Producer is already running."})
 
     logging.info("Starting kafka producer...")
@@ -142,8 +152,11 @@ def start_kafka_simulation():
     app.config[KAFKA_TASK_ID_KEY] = executor.submit(
         kafka_service.start_kafka_messages_stream,
         app.config[KAFKA_EVENT_KEY],
-        KAFKA_BOOTSTRAP, "bus-updates")
+        KAFKA_BOOTSTRAP,
+        "bus-updates",
+    )
     return jsonify({"message": "Kafka producer started in the background."})
+
 
 @app.route("/stop_spark_simulation", methods=["POST"])
 def stop_spark_simulation():
@@ -156,6 +169,7 @@ def stop_spark_simulation():
     app.config[SPARK_TASK_ID_KEY] = None
     return jsonify(stop_status)
 
+
 @app.route("/stop_kafka_simulation", methods=["POST"])
 def stop_kafka_simulation():
     if app.config[KAFKA_EVENT_KEY]:
@@ -165,15 +179,22 @@ def stop_kafka_simulation():
     app.config[KAFKA_TASK_ID_KEY] = None
     return jsonify({"message": "Kafka producer stopped."})
 
+
 @app.route("/")
 @app.route("/index")
 def index():
     bus_lines = app.config["bq_client"].get_all_bus_lines()
-    spark_link = spark_service.pyspark_main_file.replace("gs://", "https://storage.mtls.cloud.google.com/")
-    return render_template("index.html", bus_lines=bus_lines, pyspark_file_link=spark_link)
+    spark_link = spark_service.pyspark_main_file.replace(
+        "gs://", "https://storage.mtls.cloud.google.com/"
+    )
+    return render_template(
+        "index.html", bus_lines=bus_lines, pyspark_file_link=spark_link
+    )
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     import google.cloud.logging
+
     client = google.cloud.logging.Client()
     client.setup_logging()
     logging.basicConfig(level=logging.INFO)

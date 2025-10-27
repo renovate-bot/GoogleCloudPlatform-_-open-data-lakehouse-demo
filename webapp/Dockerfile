@@ -32,7 +32,7 @@ COPY . .
 
 # Build the production CSS file
 # This generates the final static/dist/output.css
-RUN tailwindcss -i ./open_data_lakehouse_demo/static/src/input.css -o ./open_data_lakehouse_demo/static/css/style.css --minify
+RUN tailwindcss -i ./buses-dashboard/static/src/input.css -o ./buses-dashboard/static/css/style.css --minify
 
 
 # Dockerfile
@@ -47,7 +47,7 @@ WORKDIR /app/src
 # Copy pyproject.toml and install dependencies using uv
 COPY pyproject.toml .
 # `uv sync` installs all direct and transitive dependencies
-RUN uv sync
+RUN uv sync --no-dev
 RUN uv pip install -e .
 
 
@@ -55,10 +55,10 @@ RUN uv pip install -e .
 COPY ./ /app/src
 
 ## Copy the built CSS and the rest of the application from the builder stage
-COPY --from=builder  /app/open_data_lakehouse_demo/static/css /app/src/open_data_lakehouse_demo/static/css
-COPY --from=builder  /app/open_data_lakehouse_demo/templates /app/src/open_data_lakehouse_demo/templates
+COPY --from=builder  /app/buses-dashboard/static/css /app/src/buses-dashboard/static/css
+COPY --from=builder  /app/buses-dashboard/templates /app/src/buses-dashboard/templates
 
 ENV PORT 8080
 EXPOSE $PORT
 
-CMD ["uv", "run", "/app/src/open_data_lakehouse_demo/main.py"]
+CMD ["uv", "run", "/app/src/buses-dashboard/main.py"]
